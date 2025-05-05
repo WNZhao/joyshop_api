@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	"joyshop_api/user-web/global"
 	"joyshop_api/user-web/proto"
 	"net/http"
 )
@@ -48,10 +49,10 @@ func HandleGrpcErrorToHttp(err error, c *gin.Context) {
 
 func GetUserList(ctx *gin.Context) {
 	zap.S().Debug("获取用户列表页数据")
-	ip := "127.0.0.1"
-	port := 50051
+	//ip := "127.0.0.1"
+	//port := 50051
 	//拨号连接用户grpc服务
-	userConn, err := grpc.NewClient(fmt.Sprintf("%s:%d", ip, port), grpc.WithTransportCredentials(insecure.NewCredentials())) // ✅ 新方式)
+	userConn, err := grpc.NewClient(fmt.Sprintf("%s:%d", global.ServerConfig.UserSrvInfo.Host, global.ServerConfig.UserSrvInfo.Port), grpc.WithTransportCredentials(insecure.NewCredentials())) // ✅ 新方式)
 	if err != nil {
 		zap.S().Errorw("[GetUserList] 连接 【用户服务失败】", "msg", err.Error())
 		return
