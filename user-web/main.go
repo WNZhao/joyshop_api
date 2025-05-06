@@ -10,8 +10,12 @@ package main
 
 import (
 	"fmt"
+	"github.com/gin-gonic/gin/binding"
+	ut "github.com/go-playground/universal-translator"
+	"github.com/go-playground/validator/v10"
 	"joyshop_api/user-web/global"
 	"joyshop_api/user-web/initialize"
+	myvalidate "joyshop_api/user-web/validator"
 
 	"go.uber.org/zap"
 )
@@ -25,6 +29,23 @@ func main() {
 
 	// 3.初始化路由
 	Router := initialize.Routers()
+
+	// 4.初始化翻译器
+	if err := initialize.InitTrans(global.ServerConfig.Lang); err != nil {
+		zap.S().Panicf("翻译器初始化失败: %v", err)
+	}
+
+	// 注册验证器
+	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
+		_ = v.RegisterValidation("mobile", myvalidate.ValidateMobile)
+		// 自定义翻译器
+		_ = v.RegisterTranslation("mobile", global.Trans, func(ut ut.Translator) error {
+			return ut.Add("mobile", "{0}不是一个有效的手机号", true)
+		}, func(ut ut.Translator, fe validator.FieldError) string {
+			t, _ := ut.T("mobile", fe.Field())
+			return t
+		})
+	}
 
 	// 4.启动服务
 	port := fmt.Sprintf(":%d", global.ServerConfig.Port)

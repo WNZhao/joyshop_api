@@ -121,3 +121,90 @@ user_srv:               # 用户服务配置
 3. 环境变量：
    - 可以通过环境变量覆盖配置文件中的值
    - 环境变量优先级高于配置文件
+
+## 表单验证说明
+
+### 自定义验证器
+
+项目支持自定义表单验证器，以手机号验证为例：
+
+1. 在 `initialize/validator.go` 中注册自定义验证器：
+```go
+// 注册自定义验证器
+if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
+    // 注册手机号验证器
+    _ = v.RegisterValidation("mobile", validator.Func(func(fl validator.FieldLevel) bool {
+        mobile := fl.Field().String()
+        // 使用正则表达式验证手机号
+        ok, _ := regexp.MatchString(`^1([38][0-9]|14[579]|5[^4]|16[6]|7[1-35-8]|9[189])\d{8}$`, mobile)
+        return ok
+    }))
+}
+```
+
+2. 在表单结构体中使用验证器：
+```go
+type PassWordLoginForm struct {
+    Mobile   string `form:"mobile" json:"mobile" binding:"required,mobile"`
+    Password string `form:"password" json:"password" binding:"required,min=3,max=20"`
+}
+```
+
+3. 错误处理：
+```go
+if err := ctx.ShouldBindJSON(&form); err != nil {
+    if utils.HandleValidatorError(ctx, err, "FormName") {
+        return
+    }
+}
+```
+
+### 验证器使用说明
+
+1. 内置验证器：
+   - `required`: 必填字段
+   - `min`: 最小长度
+   - `max`: 最大长度
+   - `email`: 邮箱格式
+   - `url`: URL格式
+   - 更多验证器请参考 [validator 文档](https://pkg.go.dev/github.com/go-playground/validator/v10)
+
+2. 自定义验证器：
+   - 在 `initialize/validator.go` 中注册
+   - 使用 `binding:"custom_validator"` 标签
+   - 验证器函数返回 `bool` 类型
+
+3. 错误处理：
+   - 使用 `utils.HandleValidatorError` 统一处理
+   - 自动移除表单名称前缀
+   - 统一错误信息格式
+
+### 错误信息格式
+
+验证失败时返回的错误信息格式：
+```json
+{
+    "code": 400,
+    "msg": {
+        "mobile": "mobile为必填字段",
+        "password": "password为必填字段"
+    }
+}
+```
+
+### 注意事项
+
+1. 验证器注册：
+   - 必须在应用启动时注册
+   - 验证器名称不能重复
+   - 验证器函数必须返回 bool 类型
+
+2. 错误处理：
+   - 使用统一的错误处理函数
+   - 保持错误信息格式一致
+   - 记录详细的错误日志
+
+3. 性能考虑：
+   - 验证器函数应该尽量简单
+   - 避免在验证器中进行复杂操作
+   - 必要时可以使用缓存优化

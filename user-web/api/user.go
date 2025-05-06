@@ -2,10 +2,17 @@ package api
 
 import (
 	"fmt"
+	"github.com/dgrijalva/jwt-go"
+	"joyshop_api/user-web/forms"
 	"joyshop_api/user-web/global"
+	"joyshop_api/user-web/middlewares"
+	"joyshop_api/user-web/models"
 	"joyshop_api/user-web/proto"
 	"net/http"
 	"strconv"
+	"time"
+
+	"joyshop_api/user-web/utils"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -49,18 +56,35 @@ func HandleGrpcErrorToHttp(err error, c *gin.Context) {
 	}
 }
 
+// GetUserSrvClient 获取用户服务客户端
+func GetUserSrvClient() (proto.UserClient, *grpc.ClientConn, error) {
+	// 连接用户服务
+	userConn, err := grpc.NewClient(fmt.Sprintf("%s:%d", global.ServerConfig.UserSrvInfo.Host, global.ServerConfig.UserSrvInfo.Port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		zap.S().Errorw("[GetUserSrvClient] 连接 【用户服务失败】", "msg", err.Error())
+		return nil, nil, err
+	}
+
+	// 生成grpc客户端
+	userSrvClient := proto.NewUserClient(userConn)
+	return userSrvClient, userConn, nil
+}
+
 func GetUserList(ctx *gin.Context) {
 	zap.S().Debug("获取用户列表页数据")
-	//ip := "127.0.0.1"
-	//port := 50051
-	//拨号连接用户grpc服务
-	userConn, err := grpc.NewClient(fmt.Sprintf("%s:%d", global.ServerConfig.UserSrvInfo.Host, global.ServerConfig.UserSrvInfo.Port), grpc.WithTransportCredentials(insecure.NewCredentials())) // ✅ 新方式)
+	// 获取用户服务客户端
+	userSrvClient, userConn, err := GetUserSrvClient()
 	if err != nil {
 		zap.S().Errorw("[GetUserList] 连接 【用户服务失败】", "msg", err.Error())
 		return
 	}
-	// 生成grpc客户端
-	userSrvClient := proto.NewUserClient(userConn)
+	defer userConn.Close()
+	claims, ok := ctx.Get("claims")
+	currentUser := claims.(*models.CustomClaims)
+	if ok {
+		zap.S().Infof("访问用户：%d, 访问用户昵称:%s", currentUser.ID, currentUser.NickName)
+	}
+
 	// 调用grpc服务
 	page := ctx.DefaultQuery("page", "1")
 	pageSize := ctx.DefaultQuery("pageSize", "10")
@@ -128,22 +152,18 @@ func DeleteUser(context *gin.Context) {
 
 }
 
+// 通过手机号查询
 func PassWordLogin(ctx *gin.Context) {
 	// 获取请求参数
-	var request struct {
-		Mobile   string `json:"mobile"`
-		Password string `json:"password"`
-	}
-	if err := ctx.ShouldBindJSON(&request); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code": 400,
-			"msg":  "参数错误",
-		})
-		return
+	passwordLoginForm := forms.PassWordLoginForm{}
+	if err := ctx.ShouldBindJSON(&passwordLoginForm); err != nil {
+		if utils.HandleValidatorError(ctx, err, "PassWordLogin") {
+			return
+		}
 	}
 
-	// 连接用户服务
-	userConn, err := grpc.NewClient(fmt.Sprintf("%s:%d", global.ServerConfig.UserSrvInfo.Host, global.ServerConfig.UserSrvInfo.Port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// 获取用户服务客户端
+	userSrvClient, userConn, err := GetUserSrvClient()
 	if err != nil {
 		zap.S().Errorw("[PassWordLogin] 连接 【用户服务失败】", "msg", err.Error())
 		ctx.JSON(http.StatusInternalServerError, gin.H{
@@ -154,12 +174,9 @@ func PassWordLogin(ctx *gin.Context) {
 	}
 	defer userConn.Close()
 
-	// 生成grpc客户端
-	userSrvClient := proto.NewUserClient(userConn)
-
 	// 1. 先通过手机号获取用户信息
 	userInfo, err := userSrvClient.GetUserByMobile(ctx, &proto.MobileRequest{
-		Mobile: request.Mobile,
+		Mobile: passwordLoginForm.Mobile,
 	})
 	if err != nil {
 		zap.S().Errorw("[PassWordLogin] 获取用户信息失败", "msg", err.Error())
@@ -169,7 +186,7 @@ func PassWordLogin(ctx *gin.Context) {
 
 	// 2. 验证密码
 	checkResp, err := userSrvClient.CheckPassword(ctx, &proto.PasswordCheckInof{
-		Password:        request.Password,
+		Password:        passwordLoginForm.Password,
 		EncryptPassword: userInfo.Password,
 	})
 	if err != nil {
@@ -186,11 +203,32 @@ func PassWordLogin(ctx *gin.Context) {
 		return
 	}
 
+	j := middlewares.NewJWT()
+	claim := models.CustomClaims{
+		ID:          uint(userInfo.Id),
+		NickName:    userInfo.Nickname,
+		AuthorityId: uint(userInfo.Role),
+		StandardClaims: jwt.StandardClaims{
+			NotBefore: time.Now().Unix(),             // 签名的生效时间
+			ExpiresAt: time.Now().Unix() + 3600*24*7, // 过期时间 一周
+			Issuer:    "joyshop",                     // 签名的发行者
+		},
+	}
+	token, err := j.CreateToken(claim)
+	if err != nil {
+		zap.S().Errorw("[PassWordLogin] 生成token失败", "msg", err.Error())
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "服务器内部错误【生成token失败】",
+		})
+		return
+	}
 	// 3. 返回用户信息
 	ctx.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"msg":  "登录成功",
 		"data": gin.H{
+			"token":    token,
 			"id":       userInfo.Id,
 			"nickName": userInfo.Nickname,
 			"mobile":   userInfo.Mobile,
