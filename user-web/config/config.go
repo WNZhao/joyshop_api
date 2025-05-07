@@ -25,6 +25,7 @@ type ServeConfig struct {
 
 type JwtConfig struct {
 	SigningKey string `mapstructure:"signing_key"`
+	ExpireTime int    `mapstructure:"expire_time"` // token过期时间（小时）
 }
 
 // 阿里云短信配置

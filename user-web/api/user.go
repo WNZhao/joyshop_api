@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"joyshop_api/user-web/forms"
 	"joyshop_api/user-web/global"
@@ -16,6 +17,7 @@ import (
 	"joyshop_api/user-web/utils"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v8"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -245,6 +247,122 @@ func PassWordLogin(ctx *gin.Context) {
 			"gender":   userInfo.Gender,
 			"birthday": userInfo.Birthday,
 			"role":     userInfo.Role,
+		},
+	})
+}
+
+// 用户注册
+func Register(ctx *gin.Context) {
+	registerForm := forms.RegisterForm{}
+	if err := ctx.ShouldBindJSON(&registerForm); err != nil {
+		if utils.HandleValidatorError(ctx, err, "Register") {
+			return
+		}
+	}
+
+	// 1. 验证短信验证码
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", global.ServerConfig.RedisInfo.Host, global.ServerConfig.RedisInfo.Port),
+		Password: "", // 如果有密码，在这里设置
+		DB:       0,  // 使用默认DB
+	})
+
+	// 从Redis获取验证码
+	code, err := rdb.Get(context.Background(), registerForm.Mobile).Result()
+	if err != nil {
+		if err == redis.Nil {
+			zap.S().Errorf("验证码已过期: %v", err)
+			ctx.JSON(http.StatusBadRequest, gin.H{
+				"code": http.StatusBadRequest,
+				"msg":  "验证码已过期",
+			})
+			return
+		}
+		zap.S().Errorf("获取验证码失败: %v", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code": http.StatusInternalServerError,
+			"msg":  "获取验证码失败",
+		})
+		return
+	}
+
+	// 验证码比对
+	if code != registerForm.Code {
+		zap.S().Errorf("验证码错误: 输入=%s, 正确=%s", registerForm.Code, code)
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code": http.StatusBadRequest,
+			"msg":  "验证码错误",
+		})
+		return
+	}
+
+	// 2. 生成默认值
+	username := fmt.Sprintf("user_%s", registerForm.Mobile)    // 用户名默认为 user_手机号
+	nickname := fmt.Sprintf("用户%s", registerForm.Mobile)       // 昵称默认为 用户手机号
+	email := fmt.Sprintf("%s@sample.com", registerForm.Mobile) // 邮箱默认为 手机号@sample.com
+
+	// 3. 调用用户服务创建用户
+	userSrvClient, userConn, err := GetUserSrvClient()
+	if err != nil {
+		zap.S().Errorf("连接用户服务失败: %v", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code": http.StatusInternalServerError,
+			"msg":  "服务器内部错误",
+		})
+		return
+	}
+	defer userConn.Close()
+
+	userInfo, err := userSrvClient.CreateUser(context.Background(), &proto.CreateUserInfo{
+		Nickname: nickname,
+		Password: registerForm.Password,
+		Mobile:   registerForm.Mobile,
+		Email:    email,
+		Username: username,
+	})
+
+	if err != nil {
+		zap.S().Errorf("创建用户失败: %v", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code": http.StatusInternalServerError,
+			"msg":  "创建用户失败",
+		})
+		return
+	}
+
+	// 4. 生成token
+	j := middlewares.NewJWT()
+	claim := models.CustomClaims{
+		ID:          uint(userInfo.Id),
+		NickName:    userInfo.Nickname,
+		AuthorityId: uint(userInfo.Role),
+		StandardClaims: jwt.StandardClaims{
+			NotBefore: time.Now().Unix(),             // 签名的生效时间
+			ExpiresAt: time.Now().Unix() + 3600*24*7, // 过期时间 一周
+			Issuer:    "joyshop",                     // 签名的发行者
+		},
+	}
+	token, err := j.CreateToken(claim)
+	if err != nil {
+		zap.S().Errorf("生成token失败: %v", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code": http.StatusInternalServerError,
+			"msg":  "生成token失败",
+		})
+		return
+	}
+
+	// 5. 删除验证码
+	rdb.Del(context.Background(), registerForm.Mobile)
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"code": http.StatusOK,
+		"msg":  "注册成功",
+		"data": gin.H{
+			"id":       userInfo.Id,
+			"nickname": userInfo.Nickname,
+			"token":    token,
+			"expired":  time.Now().Add(time.Duration(global.ServerConfig.JWTInfo.ExpireTime) * time.Hour).Unix(),
 		},
 	})
 }
