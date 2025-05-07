@@ -1,0 +1,18 @@
+name: 'user-web-debug'
+port: 8022
+lang: 'zh'
+user_srv:
+  host: 'localhost'
+  port: 50051
+jwt:
+  signing_key: 'your-jwt-signing-key'
+aliyun_sms:
+  sign_name: '阿里云短信测试'
+  template_code: 'SMS_154950909'
+  phone_numbers: 'your-phone-number'
+  access_key_id: 'your-access-key-id'
+  access_secret: 'your-access-secret'
+redis:
+  host: 'localhost'
+  port: 6379
+  expire_time: 5  # 验证码过期时间（分钟） 

@@ -51,6 +51,67 @@
 - 生产环境构建时使用 `APP_ENV=production go build`
 - 如果需要在运行时动态切换日志模式，构建时不要设置 APP_ENV
 
+## 项目配置说明
+
+### 环境变量配置
+
+#### 阿里云短信服务配置
+在 `~/.zshrc` 或 `~/.bash_profile` 中添加以下环境变量：
+```bash
+# Aliyun SMS Credentials
+export ALIBABA_CLOUD_ACCESS_KEY_ID=your_access_key_id
+export ALIBABA_CLOUD_ACCESS_KEY_SECRET=your_access_key_secret
+```
+
+### 配置文件说明
+
+项目包含两个配置文件：
+- `config-debug.yaml`: 开发环境配置
+- `config-prod.yaml`: 生产环境配置
+
+#### 配置文件结构
+```yaml
+name: 'user-web-debug'  # 服务名称
+port: 8022              # 服务端口
+lang: 'zh'              # 语言设置
+
+# 用户服务配置
+user_srv:
+  host: 'localhost'     # 开发环境使用localhost，生产环境使用服务名
+  port: 50051
+
+# JWT配置
+jwt:
+  signing_key: 'your_signing_key'
+
+# 阿里云短信配置
+aliyun_sms:
+  sign_name: '阿里云短信测试'    # 短信签名
+  template_code: 'SMS_xxx'      # 短信模板代码
+  phone_numbers: '13800138000'  # 接收短信的手机号
+
+# Redis配置
+redis:
+  host: 'localhost'     # 开发环境使用localhost，生产环境使用服务名
+  port: 6379
+```
+
+### 短信服务说明
+
+1. 短信发送功能使用阿里云短信服务
+2. 验证码生成使用本地随机数生成器，默认生成6位数字验证码
+3. 短信模板参数格式：`{"code":"123456"}`
+
+### 开发环境配置
+- 使用 `config-debug.yaml` 配置文件
+- 服务地址使用 `localhost`
+- Redis 地址使用 `localhost`
+
+### 生产环境配置
+- 使用 `config-prod.yaml` 配置文件
+- 服务地址使用服务名（如 `user-srv`）
+- Redis 地址使用服务名（如 `redis`）
+
 ## 配置文件说明
 
 ### 配置文件结构

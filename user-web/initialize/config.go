@@ -9,9 +9,10 @@
 package initialize
 
 import (
-	"github.com/fsnotify/fsnotify"
 	"joyshop_api/user-web/global"
 	"os"
+
+	"github.com/fsnotify/fsnotify"
 
 	"github.com/spf13/viper"
 	"go.uber.org/zap"

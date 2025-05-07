@@ -2,7 +2,6 @@ package api
 
 import (
 	"fmt"
-	"github.com/dgrijalva/jwt-go"
 	"joyshop_api/user-web/forms"
 	"joyshop_api/user-web/global"
 	"joyshop_api/user-web/middlewares"
@@ -11,6 +10,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/dgrijalva/jwt-go"
 
 	"joyshop_api/user-web/utils"
 
@@ -161,7 +162,14 @@ func PassWordLogin(ctx *gin.Context) {
 			return
 		}
 	}
-
+	// 获取验证码
+	if !storage.Verify(passwordLoginForm.CaptchaId, passwordLoginForm.Captcha, true) {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "验证码错误",
+		})
+		return
+	}
 	// 获取用户服务客户端
 	userSrvClient, userConn, err := GetUserSrvClient()
 	if err != nil {
@@ -239,8 +247,4 @@ func PassWordLogin(ctx *gin.Context) {
 			"role":     userInfo.Role,
 		},
 	})
-}
-
-func SendSms(context *gin.Context) {
-
 }
