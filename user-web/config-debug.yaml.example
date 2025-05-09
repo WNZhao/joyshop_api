@@ -1,7 +1,9 @@
 name: 'user-web-debug'
+host: 'localhost'
 port: 8022
 lang: 'zh'
 user_srv:
+  name: 'user-srv'
   host: 'localhost'
   port: 50051
 jwt:
@@ -15,4 +17,7 @@ aliyun_sms:
 redis:
   host: 'localhost'
   port: 6379
-  expire_time: 5  # 验证码过期时间（分钟） 
+  expire_time: 5  # 验证码过期时间（分钟）
+consul:
+  host: 'localhost'
+  port: 8500 

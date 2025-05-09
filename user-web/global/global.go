@@ -10,11 +10,15 @@ package global
 
 import (
 	"joyshop_api/user-web/config"
+	"joyshop_api/user-web/proto"
 
 	ut "github.com/go-playground/universal-translator"
+	"google.golang.org/grpc"
 )
 
 var (
-	Trans        ut.Translator
 	ServerConfig *config.ServeConfig
+	Trans        ut.Translator
+	UserClient   proto.UserClient
+	UserConn     *grpc.ClientConn
 )

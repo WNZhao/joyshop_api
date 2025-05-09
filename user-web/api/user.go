@@ -18,6 +18,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
+	"github.com/hashicorp/consul/api"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -61,8 +62,37 @@ func HandleGrpcErrorToHttp(err error, c *gin.Context) {
 
 // GetUserSrvClient 获取用户服务客户端
 func GetUserSrvClient() (proto.UserClient, *grpc.ClientConn, error) {
-	// 连接用户服务
-	userConn, err := grpc.NewClient(fmt.Sprintf("%s:%d", global.ServerConfig.UserSrvInfo.Host, global.ServerConfig.UserSrvInfo.Port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// 从consul中获取服务信息
+	cfg := api.DefaultConfig()
+	cfg.Address = fmt.Sprintf("%s:%d", global.ServerConfig.ConsulInfo.Host, global.ServerConfig.ConsulInfo.Port)
+	consulClient, err := api.NewClient(cfg)
+
+	if err != nil {
+		zap.S().Errorw("[GetUserSrvClient] 创建consul客户端失败", "msg", err.Error())
+		return nil, nil, err
+	}
+
+	// 使用服务名称进行服务发现
+	serviceName := global.ServerConfig.UserSrvInfo.Name
+	services, _, err := consulClient.Health().Service(serviceName, "", true, nil)
+
+	if err != nil {
+		zap.S().Errorw("[GetUserSrvClient] 获取服务列表失败", "msg", err.Error())
+		return nil, nil, err
+	}
+
+	if len(services) == 0 {
+		zap.S().Errorw("[GetUserSrvClient] 未找到可用服务", "service", serviceName)
+		return nil, nil, fmt.Errorf("未找到可用服务: %s", serviceName)
+	}
+
+	// 获取第一个健康的服务实例
+	service := services[0].Service
+	userSrvHost := service.Address
+	userSrvPort := service.Port
+
+	// 建立grpc连接
+	userConn, err := grpc.NewClient(fmt.Sprintf("%s:%d", userSrvHost, userSrvPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		zap.S().Errorw("[GetUserSrvClient] 连接 【用户服务失败】", "msg", err.Error())
 		return nil, nil, err
@@ -73,15 +103,9 @@ func GetUserSrvClient() (proto.UserClient, *grpc.ClientConn, error) {
 	return userSrvClient, userConn, nil
 }
 
+// GetUserList 获取用户列表
 func GetUserList(ctx *gin.Context) {
 	zap.S().Debug("获取用户列表页数据")
-	// 获取用户服务客户端
-	userSrvClient, userConn, err := GetUserSrvClient()
-	if err != nil {
-		zap.S().Errorw("[GetUserList] 连接 【用户服务失败】", "msg", err.Error())
-		return
-	}
-	defer userConn.Close()
 	claims, ok := ctx.Get("claims")
 	currentUser := claims.(*models.CustomClaims)
 	if ok {
@@ -111,18 +135,17 @@ func GetUserList(ctx *gin.Context) {
 		return
 	}
 
-	userResp, err := userSrvClient.GetUserList(ctx, &proto.PageInfo{
+	userResp, err := global.UserClient.GetUserList(ctx, &proto.PageInfo{
 		Page:     uint32(pageInt),
 		PageSize: uint32(paseSizeInt),
 	})
 	if err != nil {
-		zap.S().Errorw("[GetUserList] 调用 【用户服务失败】", "msg", err.Error())
+		zap.S().Errorw("[GetUserList] 调用用户服务失败", "msg", err.Error())
 		HandleGrpcErrorToHttp(err, ctx)
 		return
 	}
 	result := make([]interface{}, 0)
 	for _, user := range userResp.Data {
-		//result = append(result, user)
 		data := make(map[string]interface{})
 		data["id"] = user.Id
 		data["nickName"] = user.Nickname
@@ -134,7 +157,6 @@ func GetUserList(ctx *gin.Context) {
 		data["birthday"] = user.Birthday
 		data["role"] = user.Role
 		result = append(result, data)
-
 	}
 	// 返回数据
 	ctx.JSON(http.StatusOK, gin.H{

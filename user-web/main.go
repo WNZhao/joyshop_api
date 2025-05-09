@@ -10,12 +10,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/gin-gonic/gin/binding"
-	ut "github.com/go-playground/universal-translator"
-	"github.com/go-playground/validator/v10"
 	"joyshop_api/user-web/global"
 	"joyshop_api/user-web/initialize"
 	myvalidate "joyshop_api/user-web/validator"
+
+	"github.com/gin-gonic/gin/binding"
+	ut "github.com/go-playground/universal-translator"
+	"github.com/go-playground/validator/v10"
 
 	"go.uber.org/zap"
 )
@@ -35,7 +36,7 @@ func main() {
 		zap.S().Panicf("翻译器初始化失败: %v", err)
 	}
 
-	// 注册验证器
+	// 5.注册验证器
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
 		_ = v.RegisterValidation("mobile", myvalidate.ValidateMobile)
 		// 自定义翻译器
@@ -47,7 +48,18 @@ func main() {
 		})
 	}
 
-	// 4.启动服务
+	// 6.初始化 gRPC 客户端
+	if err := initialize.InitUserGrpcClient(); err != nil {
+		zap.S().Panic("初始化 gRPC 客户端失败", err.Error())
+	}
+	defer global.UserConn.Close()
+
+	// 7.注册服务到 Consul
+	if err := initialize.InitConsulRegister(); err != nil {
+		zap.S().Panicf("服务注册失败: %v", err)
+	}
+
+	// 8.启动服务
 	port := fmt.Sprintf(":%d", global.ServerConfig.Port)
 	zap.S().Infof("服务启动 端口: %s", port)
 
