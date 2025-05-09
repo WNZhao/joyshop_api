@@ -1,3 +1,132 @@
+# JoyShop API (user-web)
+
+## 项目说明
+
+本项目是 JoyShop 电商系统的用户服务 Web 层，提供用户相关的 HTTP API 接口，通过 gRPC 与用户服务进行通信。
+
+### 项目结构
+
+```
+user-web/
+├── api/            # API 接口层
+├── config/         # 配置文件
+├── forms/          # 表单验证
+├── global/         # 全局变量
+├── initialize/     # 初始化相关
+├── middlewares/    # 中间件
+├── models/         # 数据模型
+├── proto/          # protobuf 文件
+├── router/         # 路由配置
+└── utils/          # 工具函数
+```
+
+### 技术栈
+
+- Web 框架：Gin
+- 服务发现：Consul
+- 数据存储：Redis
+- 日志系统：zap
+- 配置管理：viper
+- 表单验证：validator
+- 认证：JWT
+
+## 功能特性
+
+### 1. 服务注册与发现
+
+- 使用 Consul 进行服务注册与发现
+- 服务启动时自动注册到 Consul
+- 健康检查机制:
+  - 每15秒检查一次服务状态
+  - 检查失败15秒后自动注销服务
+  - 确保服务列表中的服务都是可用的
+
+### 2. gRPC 客户端
+
+- 使用 Consul 进行服务发现
+- 自动连接可用的用户服务实例
+- 支持服务健康检查
+- 使用 `grpc.NewClient` 创建连接
+- 全局客户端管理:
+  - 在 `global` 包中定义全局客户端
+  - 服务启动时初始化连接
+  - 服务关闭时自动关闭连接
+
+### 3. API 接口
+
+- 用户注册
+- 用户登录
+- 获取用户列表
+- 用户信息管理
+
+### 4. 中间件
+
+- JWT 认证
+- CORS 跨域支持
+- 请求日志记录
+
+## 配置说明
+
+### Consul 配置
+
+```yaml
+consul:
+  host: "localhost"  # Consul 服务器地址
+  port: 8500        # Consul 服务器端口
+```
+
+### 服务配置
+
+```yaml
+name: "user-web"    # 服务名称
+host: "localhost"   # 服务地址
+port: 8021         # 服务端口
+```
+
+## 开发环境要求
+
+- Go 1.16+
+- Consul
+- Redis
+
+## 快速开始
+
+1. 启动 Consul
+
+```bash
+consul agent -dev
+```
+
+2. 启动 Web 服务
+
+```bash
+go run main.go
+```
+
+## 项目特点
+
+1. 微服务架构
+   - 使用 gRPC 进行服务间通信
+   - Consul 服务注册与发现
+   - 服务健康检查
+
+2. 代码组织
+   - 清晰的目录结构
+   - 模块化的设计
+   - 统一的错误处理
+
+3. 开发体验
+   - 完整的日志记录
+   - 统一的配置管理
+   - 便捷的开发工具
+
+## 最近更新
+
+- 优化 gRPC 客户端初始化逻辑
+- 改进服务注册机制
+- 统一使用 `grpc.NewClient` API
+- 增强健康检查配置
+
 # joyshop_api
 
 ## 日志配置说明
@@ -56,7 +185,9 @@
 ### 环境变量配置
 
 #### 阿里云短信服务配置
+
 在 `~/.zshrc` 或 `~/.bash_profile` 中添加以下环境变量：
+
 ```bash
 # Aliyun SMS Credentials
 export ALIBABA_CLOUD_ACCESS_KEY_ID=your_access_key_id
@@ -66,10 +197,12 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET=your_access_key_secret
 ### 配置文件说明
 
 项目包含两个配置文件：
+
 - `config-debug.yaml`: 开发环境配置
 - `config-prod.yaml`: 生产环境配置
 
 #### 配置文件结构
+
 ```yaml
 name: 'user-web-debug'  # 服务名称
 port: 8022              # 服务端口
@@ -103,11 +236,13 @@ redis:
 3. 短信模板参数格式：`{"code":"123456"}`
 
 ### 开发环境配置
+
 - 使用 `config-debug.yaml` 配置文件
 - 服务地址使用 `localhost`
 - Redis 地址使用 `localhost`
 
 ### 生产环境配置
+
 - 使用 `config-prod.yaml` 配置文件
 - 服务地址使用服务名（如 `user-srv`）
 - Redis 地址使用服务名（如 `redis`）
@@ -122,6 +257,7 @@ redis:
 - 生产环境：使用 `config-prod.yaml`
 
 配置文件示例：
+
 ```yaml
 name: "user-web-debug"  # 服务名称
 port: 8022              # 服务端口
@@ -141,12 +277,14 @@ user_srv:               # 用户服务配置
 ### 配置使用说明
 
 1. 开发环境配置：
+
    ```bash
    # 默认使用 config-debug.yaml
    go run main.go
    ```
 
 2. 生产环境配置：
+
    ```bash
    # 使用 config-prod.yaml
    APP_ENV=production go run main.go
@@ -190,6 +328,7 @@ user_srv:               # 用户服务配置
 项目支持自定义表单验证器，以手机号验证为例：
 
 1. 在 `initialize/validator.go` 中注册自定义验证器：
+
 ```go
 // 注册自定义验证器
 if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
@@ -204,6 +343,7 @@ if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
 ```
 
 2. 在表单结构体中使用验证器：
+
 ```go
 type PassWordLoginForm struct {
     Mobile   string `form:"mobile" json:"mobile" binding:"required,mobile"`
@@ -212,6 +352,7 @@ type PassWordLoginForm struct {
 ```
 
 3. 错误处理：
+
 ```go
 if err := ctx.ShouldBindJSON(&form); err != nil {
     if utils.HandleValidatorError(ctx, err, "FormName") {
@@ -243,6 +384,7 @@ if err := ctx.ShouldBindJSON(&form); err != nil {
 ### 错误信息格式
 
 验证失败时返回的错误信息格式：
+
 ```json
 {
     "code": 400,
