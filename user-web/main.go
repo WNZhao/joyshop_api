@@ -2,7 +2,7 @@
  * @Author: error: error: git config user.name & please set dead value or install git && error: git config user.email & please set dead value or install git & please set dead value or install git
  * @Date: 2025-05-04 11:40:59
  * @LastEditors: error: error: git config user.name & please set dead value or install git && error: git config user.email & please set dead value or install git & please set dead value or install git
- * @LastEditTime: 2025-05-05 16:31:09
+ * @LastEditTime: 2025-05-10 11:41:49
  * @FilePath: /joyshop_api/user-web/main.go
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -12,7 +12,9 @@ import (
 	"fmt"
 	"joyshop_api/user-web/global"
 	"joyshop_api/user-web/initialize"
+	"joyshop_api/user-web/utils"
 	myvalidate "joyshop_api/user-web/validator"
+	"os"
 
 	"github.com/gin-gonic/gin/binding"
 	ut "github.com/go-playground/universal-translator"
@@ -57,6 +59,14 @@ func main() {
 	// 7.注册服务到 Consul
 	if err := initialize.InitConsulRegister(); err != nil {
 		zap.S().Panicf("服务注册失败: %v", err)
+	}
+	// 如果是生产环境，则使用随机端口
+	if os.Getenv("APP_ENV") == "production" {
+		port, err := utils.GetFreePort()
+		if err != nil {
+			zap.S().Panicf("获取可用端口失败: %v", err)
+		}
+		global.ServerConfig.Port = port
 	}
 
 	// 8.启动服务
