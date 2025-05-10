@@ -14,13 +14,30 @@ import (
 	"joyshop_api/user-web/proto"
 
 	"github.com/hashicorp/consul/api"
+	_ "github.com/mbobakov/grpc-consul-resolver" // It's important
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// InitUserGrpcClient 初始化用户服务 gRPC 客户端
 func InitUserGrpcClient() error {
+	addr := fmt.Sprintf("consul://192.168.1.7:8500/user-srv?wait=14s&tag=joyshop")
+	conn, err := grpc.NewClient(
+		addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy": "round_robin"}`),
+	)
+	if err != nil {
+		zap.S().Errorw("[InitUserGrpcClient] 连接用户服务失败", "msg", err.Error())
+		return err
+	}
+	global.UserConn = conn
+	global.UserClient = proto.NewUserClient(conn)
+	return nil
+}
+
+// InitUserGrpcClient 初始化用户服务 gRPC 客户端
+func InitUserGrpcClient_old() error {
 	// 从consul中获取服务信息
 	cfg := api.DefaultConfig()
 	cfg.Address = fmt.Sprintf("%s:%d", global.ServerConfig.ConsulInfo.Host, global.ServerConfig.ConsulInfo.Port)

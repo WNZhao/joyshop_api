@@ -70,7 +70,7 @@ func main() {
 	}
 
 	// 8.启动服务
-	port := fmt.Sprintf(":%d", global.ServerConfig.Port)
+	port := fmt.Sprintf("0.0.0.0:%d", global.ServerConfig.Port)
 	zap.S().Infof("服务启动 端口: %s", port)
 
 	if err := Router.Run(port); err != nil {
