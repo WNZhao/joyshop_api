@@ -1,8 +1,8 @@
 /*
  * @Author: error: error: git config user.name & please set dead value or install git && error: git config user.email & please set dead value or install git & please set dead value or install git
  * @Date: 2025-05-05 15:50:09
- * @LastEditors: error: error: git config user.name & please set dead value or install git && error: git config user.email & please set dead value or install git & please set dead value or install git
- * @LastEditTime: 2025-05-09 15:41:05
+ * @LastEditors: Will zw37520@gmail.com
+ * @LastEditTime: 2025-05-11 08:52:31
  * @FilePath: /joyshop_api/user-web/config/config.go
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -24,6 +24,7 @@ type ServeConfig struct {
 	AliyunSms   AliyunSmsConfig `mapstructure:"aliyun_sms"`
 	RedisInfo   RedisConfig     `mapstructure:"redis"`
 	ConsulInfo  ConsulConfig    `mapstructure:"consul"`
+	NacosInfo   NacosConfig     `mapstructure:"nacos"`
 }
 
 type JwtConfig struct {
@@ -52,4 +53,17 @@ type RedisConfig struct {
 type ConsulConfig struct {
 	Host string `mapstructure:"host"`
 	Port int    `mapstructure:"port"`
+}
+
+// NacosConfig Nacos配置
+type NacosConfig struct {
+	Host      string `mapstructure:"host"`
+	Port      uint64 `mapstructure:"port"`
+	Namespace string `mapstructure:"namespace"`
+	Timeout   uint64 `mapstructure:"timeout"`
+	LogDir    string `mapstructure:"logDir"`
+	CacheDir  string `mapstructure:"cacheDir"`
+	LogLevel  string `mapstructure:"logLevel"`
+	DataId    string `mapstructure:"dataId"`
+	Group     string `mapstructure:"group"`
 }

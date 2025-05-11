@@ -1,0 +1,10 @@
+nacos:
+  host: 192.168.1.7
+  port: 8848
+  namespace: '8976f27d-9226-4d72-8f80-1364847e2c1b'
+  timeout: 5000
+  logDir: './tmp/log'
+  cacheDir: './tmp/cache'
+  logLevel: 'debug'
+  dataId: 'user_web'
+  group: 'dev'

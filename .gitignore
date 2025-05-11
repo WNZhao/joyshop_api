@@ -473,3 +473,30 @@ Temporary Items
 user-web/config-debug.yaml
 user-web/config-prod.yaml
 
+# 临时文件
+tmp/*
+!tmp/.gitkeep
+*.log
+
+# IDE 文件
+.idea/
+.vscode/
+
+# 编译输出
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# 测试文件
+*.test
+*.out
+
+# 依赖目录
+vendor/
+
+# 环境配置
+.env
+.env.local
+
