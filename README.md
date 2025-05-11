@@ -268,11 +268,144 @@ user_srv:               # 用户服务配置
 
 ### 配置热更新
 
-项目支持配置文件的动态热更新：
+#### 实现原理
 
-1. 当配置文件发生变化时，系统会自动重新加载配置
-2. 配置更新会实时生效，无需重启服务
-3. 配置更新会通过日志记录变更信息
+配置热更新通过 Viper 的 `WatchConfig` 和 `OnConfigChange` 实现：
+
+```go
+viper.WatchConfig()
+viper.OnConfigChange(func(in fsnotify.Event) {
+    zap.S().Infof("配置文件发生变化: %s", in.Name)
+    if err := viper.Unmarshal(&global.ServerConfig); err != nil {
+        zap.S().Panicf("重新解析配置文件失败: %v", err)
+    }
+    zap.S().Infof("重新加载配置信息: %v", global.ServerConfig)
+})
+```
+
+#### 配置分类
+
+为了更好的管理配置更新，我们将配置分为两类：
+
+1. 可热更新的配置
+   - 日志级别
+   - 超时时间
+   - 重试次数
+   - 缓存配置
+   - 其他不影响服务核心功能的配置
+
+2. 需要重启的配置
+   - 数据库连接
+   - Redis连接
+   - 服务端口
+   - 其他需要重新初始化的核心配置
+
+#### 最佳实践
+
+1. 配置变更处理
+
+   ```go
+   func handleConfigChange(newConfig *config.ServerConfig) {
+       // 1. 检查哪些配置发生了变化
+       if newConfig.LogLevel != global.ServerConfig.LogLevel {
+           // 更新日志级别
+           updateLogLevel(newConfig.LogLevel)
+       }
+       
+       if newConfig.RedisInfo != global.ServerConfig.RedisInfo {
+           // Redis配置变化，需要重新连接
+           gracefulRestartRedis(newConfig.RedisInfo)
+       }
+       
+       // 2. 更新内存中的配置
+       global.ServerConfig = newConfig
+   }
+   ```
+
+2. 优雅重启机制
+
+   ```go
+   func gracefulRestartRedis(newConfig config.RedisConfig) {
+       // 1. 创建新的连接池
+       newPool := createRedisPool(newConfig)
+       
+       // 2. 等待一段时间，让旧连接池中的连接使用完毕
+       time.Sleep(5 * time.Second)
+       
+       // 3. 关闭旧连接池
+       closeRedisPool(global.RedisPool)
+       
+       // 4. 更新全局连接池
+       global.RedisPool = newPool
+   }
+   ```
+
+3. 监控和告警
+
+   ```go
+   func monitorConfigChange(oldConfig, newConfig *config.ServerConfig) {
+       // 检查关键配置变化
+       if oldConfig.Port != newConfig.Port {
+           // 发送告警
+           alert("端口配置发生变化，需要重启服务")
+       }
+       
+       if oldConfig.DatabaseURL != newConfig.DatabaseURL {
+           // 发送告警
+           alert("数据库配置发生变化，需要重启服务")
+       }
+   }
+   ```
+
+#### 注意事项
+
+1. 配置更新策略
+   - 对于可热更新的配置，直接更新内存中的值
+   - 对于需要重启的配置，实现优雅重启机制
+   - 确保正在处理的请求不受影响
+
+2. 线程安全
+   - 配置更新时要考虑并发访问
+   - 使用适当的同步机制保护共享资源
+   - 避免在更新过程中出现数据不一致
+
+3. 监控告警
+   - 实现配置变更的监控机制
+   - 对关键配置变更发送告警
+   - 记录详细的配置变更日志
+
+4. 优雅重启
+   - 等待当前请求处理完成
+   - 创建新的连接池
+   - 平滑关闭旧连接
+   - 确保服务不中断
+
+5. 回滚机制
+   - 保存配置变更历史
+   - 提供快速回滚能力
+   - 记录回滚操作日志
+
+#### 建议
+
+1. 配置分类
+   - 明确区分可热更新和需要重启的配置
+   - 为不同类型的配置实现不同的更新策略
+   - 定期评估配置分类的合理性
+
+2. 更新时机
+   - 选择业务低峰期进行配置更新
+   - 实现配置更新的时间窗口控制
+   - 提供配置更新的手动触发机制
+
+3. 测试验证
+   - 在测试环境验证配置更新机制
+   - 模拟各种异常情况下的更新行为
+   - 确保配置更新的可靠性
+
+4. 文档维护
+   - 记录配置项的更新策略
+   - 说明配置更新的影响范围
+   - 提供配置更新的操作指南
 
 ### 配置使用说明
 
@@ -411,3 +544,174 @@ if err := ctx.ShouldBindJSON(&form); err != nil {
    - 验证器函数应该尽量简单
    - 避免在验证器中进行复杂操作
    - 必要时可以使用缓存优化
+
+## Nacos 配置中心集成
+
+项目已集成 Nacos 配置中心，支持动态配置管理。配置读取优先级如下：
+
+1. 优先从 Nacos 配置中心读取配置
+2. 如果 Nacos 配置读取失败，则使用本地配置文件
+
+### 配置文件说明
+
+- `nacos-dev.yaml`: 开发环境 Nacos 配置
+- `nacos-prod.yaml`: 生产环境 Nacos 配置
+
+### Nacos 配置示例
+
+```json
+{
+   "name": "user-web",
+   "port": 8022,
+   "lang": "zh",
+   "user_srv": {
+      "host": "localhost",
+      "port": 50051,
+      "name": "user-srv"
+   },
+   "jwt": {
+      "signing_key": "p0O5x#uMi!iKyu0IaTOJ&3^nrajtktxN",
+      "expire_time": 24
+   },
+   "aliyun_sms": {
+      "sign_name": "阿里云短信测试",
+      "template_code": "SMS_154950909",
+      "phone_numbers": "13269437038",
+      "access_key_id": "",
+      "access_secret": ""
+   },
+   "redis": {
+      "host": "localhost",
+      "port": 6379,
+      "expire_time": 5
+   },
+   "consul": {
+      "host": "192.168.1.7",
+      "port": 8500
+   }
+}
+```
+
+### 环境变量
+
+- `APP_ENV`: 设置运行环境
+  - `production`: 使用生产环境配置
+  - 其他值: 使用开发环境配置
+
+### 配置热更新
+
+1. 本地配置文件变化时自动重新加载
+2. Nacos 配置中心配置变化时自动更新
+3. 配置更新时会自动重新初始化相关服务
+
+### 注意事项
+
+1. 确保 Nacos 服务器可访问
+2. 配置文件中的敏感信息（如密钥、密码等）建议通过环境变量注入
+3. 生产环境建议使用 Nacos 配置中心进行配置管理
+4. 本地配置文件主要用于开发和测试环境
+
+## 配置管理
+
+### 本地配置
+
+项目使用 Viper 进行配置管理，支持本地配置文件和 Nacos 配置中心两种方式。
+
+#### 配置文件结构
+
+1. 开发环境配置文件：`user-web/config-debug.yaml`
+2. 生产环境配置文件：`user-web/config-prod.yaml`
+3. Nacos 配置文件：`user-web/nacos-dev.yaml`（开发环境）和 `user-web/nacos-prod.yaml`（生产环境）
+
+#### 配置读取流程
+
+1. 首先尝试读取本地配置文件
+2. 然后尝试从 Nacos 配置中心读取配置
+3. 如果 Nacos 配置读取失败，则使用本地配置
+4. 支持配置热更新，当配置文件发生变化时自动重新加载
+
+### Nacos 配置中心集成
+
+#### 配置文件示例
+
+```yaml
+# nacos-dev.yaml
+nacos:
+  host: 192.168.1.7
+  port: 8848
+  namespace: '8976f27d-9226-4d72-8f80-1364847e2c1b'
+  timeout: 5000
+  logDir: './tmp/log'
+  cacheDir: './tmp/cache'
+  logLevel: 'debug'
+  dataId: 'user_web'
+  group: 'dev'
+```
+
+#### 配置项说明
+
+- `host`: Nacos 服务器地址
+- `port`: Nacos 服务器端口
+- `namespace`: Nacos 命名空间 ID
+- `timeout`: 连接超时时间（毫秒）
+- `logDir`: 日志目录
+- `cacheDir`: 缓存目录
+- `logLevel`: 日志级别
+- `dataId`: 配置 ID
+- `group`: 配置分组
+
+#### 配置中心数据格式
+
+Nacos 配置中心存储的配置数据格式应与本地配置文件格式一致：
+
+```json
+{
+   "name": "user-web",
+   "port": 8022,
+   "lang": "zh",
+   "user_srv": {
+      "host": "localhost",
+      "port": 50051,
+      "name": "user-srv"
+   },
+   "jwt": {
+      "signing_key": "p0O5x#uMi!iKyu0IaTOJ&3^nrajtktxN",
+      "expire_time": 24
+   },
+   "aliyun_sms": {
+      "sign_name": "阿里云短信测试",
+      "template_code": "SMS_154950909",
+      "phone_numbers": "13269437038",
+      "access_key_id": "",
+      "access_secret": ""
+   },
+   "redis": {
+      "host": "localhost",
+      "port": 6379,
+      "expire_time": 5
+   },
+   "consul": {
+      "host": "192.168.1.7",
+      "port": 8500
+   }
+}
+```
+
+### 环境变量
+
+- `APP_ENV`: 设置运行环境
+  - `production`: 使用生产环境配置
+  - 其他值: 使用开发环境配置
+
+### 配置热更新
+
+1. 本地配置文件变化时自动重新加载
+2. Nacos 配置中心配置变化时自动更新
+3. 配置更新时会自动重新初始化相关服务
+
+### 注意事项
+
+1. 确保 Nacos 服务器可访问
+2. 配置文件中的敏感信息（如密钥、密码等）建议通过环境变量注入
+3. 生产环境建议使用 Nacos 配置中心进行配置管理
+4. 本地配置文件主要用于开发和测试环境
