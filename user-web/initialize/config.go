@@ -2,7 +2,7 @@
  * @Author: error: error: git config user.name & please set dead value or install git && error: git config user.email & please set dead value or install git & please set dead value or install git
  * @Date: 2025-05-05 15:52:24
  * @LastEditors: Will zw37520@gmail.com
- * @LastEditTime: 2025-05-11 10:34:59
+ * @LastEditTime: 2025-05-11 13:06:01
  * @FilePath: /joyshop_api/user-web/initialize/config.go
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -13,13 +13,14 @@ import (
 	"joyshop_api/user-web/global"
 	"os"
 
+	"encoding/json"
+
 	"github.com/fsnotify/fsnotify"
 	"github.com/nacos-group/nacos-sdk-go/clients"
 	"github.com/nacos-group/nacos-sdk-go/common/constant"
 	"github.com/nacos-group/nacos-sdk-go/vo"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v3"
 )
 
 var NacosConfig config.NacosConfig
@@ -47,39 +48,19 @@ func InitConfig() {
 		if err := viper.Unmarshal(&global.ServerConfig); err != nil {
 			zap.S().Panicf("解析配置文件失败: %v", err)
 		}
+
+		// 打印本地配置信息
+		zap.S().Infof("服务名称: %s", global.ServerConfig.Name)
+		zap.S().Infof("服务端口: %d", global.ServerConfig.Port)
+		zap.S().Infof("JWT过期时间: %d小时", global.ServerConfig.JWTInfo.ExpireTime)
+		zap.S().Infof("阿里云短信签名: %s", global.ServerConfig.AliyunSms.SignName)
+		zap.S().Infof("阿里云短信模板: %s", global.ServerConfig.AliyunSms.TemplateCode)
+		zap.S().Infof("阿里云短信手机号: %s", global.ServerConfig.AliyunSms.PhoneNumbers)
+		zap.S().Infof("Redis地址: %s", global.ServerConfig.RedisInfo.Host)
+		zap.S().Infof("Redis端口: %d", global.ServerConfig.RedisInfo.Port)
+		zap.S().Infof("Consul地址: %s", global.ServerConfig.ConsulInfo.Host)
+		zap.S().Infof("Consul端口: %d", global.ServerConfig.ConsulInfo.Port)
 	}
-
-	// 打印详细的配置信息
-	zap.S().Infof("服务名称: %s", global.ServerConfig.Name)
-	zap.S().Infof("服务端口: %d", global.ServerConfig.Port)
-
-	// JWT配置
-	// zap.S().Infof("JWT密钥: %s", global.ServerConfig.JWTInfo.SigningKey)
-	zap.S().Infof("JWT过期时间: %d小时", global.ServerConfig.JWTInfo.ExpireTime)
-
-	// 阿里云短信配置
-	zap.S().Infof("阿里云短信签名: %s", global.ServerConfig.AliyunSms.SignName)
-	zap.S().Infof("阿里云短信模板: %s", global.ServerConfig.AliyunSms.TemplateCode)
-	zap.S().Infof("阿里云短信手机号: %s", global.ServerConfig.AliyunSms.PhoneNumbers)
-
-	// Redis配置
-	zap.S().Infof("Redis地址: %s", global.ServerConfig.RedisInfo.Host)
-	zap.S().Infof("Redis端口: %d", global.ServerConfig.RedisInfo.Port)
-
-	// Consul配置
-	zap.S().Infof("Consul地址: %s", global.ServerConfig.ConsulInfo.Host)
-	zap.S().Infof("Consul端口: %d", global.ServerConfig.ConsulInfo.Port)
-
-	// Nacos配置
-	zap.S().Infof("Nacos地址: %s", global.ServerConfig.NacosInfo.Host)
-	zap.S().Infof("Nacos端口: %d", global.ServerConfig.NacosInfo.Port)
-	zap.S().Infof("Nacos命名空间: %s", global.ServerConfig.NacosInfo.Namespace)
-	zap.S().Infof("Nacos超时时间: %d", global.ServerConfig.NacosInfo.Timeout)
-	zap.S().Infof("Nacos日志目录: %s", global.ServerConfig.NacosInfo.LogDir)
-	zap.S().Infof("Nacos缓存目录: %s", global.ServerConfig.NacosInfo.CacheDir)
-	zap.S().Infof("Nacos日志级别: %s", global.ServerConfig.NacosInfo.LogLevel)
-	zap.S().Infof("Nacos数据ID: %s", global.ServerConfig.NacosInfo.DataId)
-	zap.S().Infof("Nacos分组: %s", global.ServerConfig.NacosInfo.Group)
 
 	// 监听本地配置文件变化
 	viper.WatchConfig()
@@ -103,7 +84,7 @@ func initNacosConfig() error {
 	v := viper.New()
 	v.SetConfigName(configName)
 	v.SetConfigType("yaml")
-	v.AddConfigPath(".")
+	v.AddConfigPath("./user-web")
 
 	// 读取配置文件
 	if err := v.ReadInConfig(); err != nil {
@@ -161,10 +142,15 @@ func initNacosConfig() error {
 	zap.S().Infof("成功从 Nacos 获取配置: %s", content)
 
 	// 解析配置内容
-	if err := yaml.Unmarshal([]byte(content), &global.ServerConfig); err != nil {
+	if err := json.Unmarshal([]byte(content), &global.ServerConfig); err != nil {
 		zap.S().Errorf("解析 Nacos 配置内容失败: %v", err)
 		return err
 	}
+
+	// 打印用户服务配置
+	zap.S().Infof("用户服务配置详情: %+v", global.ServerConfig.UserSrvInfo)
+	zap.S().Infof("用户服务名称: %s", global.ServerConfig.UserSrvInfo.Name)
+	zap.S().Infof("用户服务地址: %s:%d", global.ServerConfig.UserSrvInfo.Host, global.ServerConfig.UserSrvInfo.Port)
 
 	zap.S().Infof("成功解析 Nacos 配置内容: %+v", global.ServerConfig)
 
@@ -174,7 +160,7 @@ func initNacosConfig() error {
 		Group:  NacosConfig.Group,
 		OnChange: func(namespace, group, dataId, data string) {
 			zap.S().Infof("Nacos 配置发生变化: namespace=%s, group=%s, dataId=%s", namespace, group, dataId)
-			if err := yaml.Unmarshal([]byte(data), &global.ServerConfig); err != nil {
+			if err := json.Unmarshal([]byte(data), &global.ServerConfig); err != nil {
 				zap.S().Errorf("重新解析 Nacos 配置失败: %v", err)
 				return
 			}

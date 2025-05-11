@@ -1,8 +1,8 @@
 /*
  * @Author: error: error: git config user.name & please set dead value or install git && error: git config user.email & please set dead value or install git & please set dead value or install git
  * @Date: 2025-05-09 16:31:26
- * @LastEditors: error: error: git config user.name & please set dead value or install git && error: git config user.email & please set dead value or install git & please set dead value or install git
- * @LastEditTime: 2025-05-09 16:37:37
+ * @LastEditors: Will zw37520@gmail.com
+ * @LastEditTime: 2025-05-11 12:42:30
  * @FilePath: /joyshop_api/user-web/initialize/user_grpc.go
  * @Description: 用户服务 gRPC 客户端初始化
  */
@@ -21,7 +21,19 @@ import (
 )
 
 func InitUserGrpcClient() error {
-	addr := fmt.Sprintf("consul://192.168.1.7:8500/user-srv?wait=14s&tag=joyshop")
+	// 打印配置信息
+	zap.S().Infof("用户服务配置: %+v", global.ServerConfig.UserSrvInfo)
+	zap.S().Infof("Consul配置: %+v", global.ServerConfig.ConsulInfo)
+
+	// 使用配置文件中的 Consul 配置
+	addr := fmt.Sprintf("consul://%s:%d/%s?wait=14s",
+		global.ServerConfig.ConsulInfo.Host,
+		global.ServerConfig.ConsulInfo.Port,
+		global.ServerConfig.UserSrvInfo.Name,
+	)
+
+	zap.S().Infof("正在连接用户服务: %s ===============", addr)
+
 	conn, err := grpc.NewClient(
 		addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -31,8 +43,10 @@ func InitUserGrpcClient() error {
 		zap.S().Errorw("[InitUserGrpcClient] 连接用户服务失败", "msg", err.Error())
 		return err
 	}
+
 	global.UserConn = conn
 	global.UserClient = proto.NewUserClient(conn)
+	zap.S().Infof("成功连接到用户服务: %s", addr)
 	return nil
 }
 

@@ -45,7 +45,7 @@ func InitConsulRegister() error {
 
 	registration.ID = fmt.Sprintf("%s-%d", global.ServerConfig.Name, global.ServerConfig.Port)
 	registration.Port = global.ServerConfig.Port
-	registration.Tags = []string{"user", "web", "api"}
+	registration.Tags = []string{"user-web", "web", "api"}
 	registration.Address = localIP // 使用自动获取的IP地址
 
 	// 生成对应的检查对象

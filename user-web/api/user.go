@@ -56,11 +56,14 @@ func HandleGrpcErrorToHttp(err error, c *gin.Context) {
 				return
 			}
 		}
-
 	}
 }
 
 // GetUserSrvClient 获取用户服务客户端
+// 注意：此函数为历史代码，展示了服务发现的演进过程
+// 1. 最初版本：直接通过 Consul API 获取服务地址并建立连接
+// 2. 当前版本：使用 grpc-consul-resolver 实现服务发现和负载均衡
+// 现在推荐使用全局的 global.UserClient 进行服务调用
 func GetUserSrvClient() (proto.UserClient, *grpc.ClientConn, error) {
 	// 从consul中获取服务信息
 	cfg := api.DefaultConfig()
@@ -194,20 +197,9 @@ func PassWordLogin(ctx *gin.Context) {
 		})
 		return
 	}
-	// 获取用户服务客户端
-	userSrvClient, userConn, err := GetUserSrvClient()
-	if err != nil {
-		zap.S().Errorw("[PassWordLogin] 连接 【用户服务失败】", "msg", err.Error())
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code": 500,
-			"msg":  "服务器内部错误",
-		})
-		return
-	}
-	defer userConn.Close()
 
 	// 1. 先通过手机号获取用户信息
-	userInfo, err := userSrvClient.GetUserByMobile(ctx, &proto.MobileRequest{
+	userInfo, err := global.UserClient.GetUserByMobile(ctx, &proto.MobileRequest{
 		Mobile: passwordLoginForm.Mobile,
 	})
 	if err != nil {
@@ -217,7 +209,7 @@ func PassWordLogin(ctx *gin.Context) {
 	}
 
 	// 2. 验证密码
-	checkResp, err := userSrvClient.CheckPassword(ctx, &proto.PasswordCheckInof{
+	checkResp, err := global.UserClient.CheckPassword(ctx, &proto.PasswordCheckInof{
 		Password:        passwordLoginForm.Password,
 		EncryptPassword: userInfo.Password,
 	})
@@ -324,18 +316,7 @@ func Register(ctx *gin.Context) {
 	email := fmt.Sprintf("%s@sample.com", registerForm.Mobile) // 邮箱默认为 手机号@sample.com
 
 	// 3. 调用用户服务创建用户
-	userSrvClient, userConn, err := GetUserSrvClient()
-	if err != nil {
-		zap.S().Errorf("连接用户服务失败: %v", err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code": http.StatusInternalServerError,
-			"msg":  "服务器内部错误",
-		})
-		return
-	}
-	defer userConn.Close()
-
-	userInfo, err := userSrvClient.CreateUser(context.Background(), &proto.CreateUserInfo{
+	userInfo, err := global.UserClient.CreateUser(context.Background(), &proto.CreateUserInfo{
 		Nickname: nickname,
 		Password: registerForm.Password,
 		Mobile:   registerForm.Mobile,
